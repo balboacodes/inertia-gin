@@ -153,22 +153,22 @@ func Render(context *gin.Context, component string, props gin.H) {
 		Version:   getVersion(),
 	}
 
+	headers := context.MustGet("inertia.headers").(requestHeaders)
+
+	if headers.XInertia {
+		context.Header(X_INERTIA, "true")
+		context.Header(VARY, X_INERTIA)
+		context.JSON(http.StatusOK, page)
+
+		return
+	}
+
 	data, error := json.Marshal(page)
 	if error != nil {
 		panic(error)
 	}
 
-	headers := context.MustGet("inertia.headers").(requestHeaders)
-
-	if !headers.XInertia {
-		context.HTML(http.StatusOK, "index.html", gin.H{"data": template.JS(data)})
-
-		return
-	}
-
-	context.Header(X_INERTIA, "true")
-	context.Header(VARY, X_INERTIA)
-	context.JSON(http.StatusOK, page)
+	context.HTML(http.StatusOK, "index.html", gin.H{"data": template.JS(data)})
 }
 
 // Flash flashes a value to the current session with the default "_flash" key.
