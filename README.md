@@ -4,7 +4,7 @@ inertia-gin is a basic [Inertia.js](https://github.com/inertiajs) adapter for [G
 
 ## Features
 
-This package currently supports rendering Inertia pages, with version checking, and flash data. In short, it doesn't support every Inertia feature, but if you want a simple way to render Inertia pages with Gin, this will work.
+This package currently supports rendering Inertia pages, with automatic asset version handling, and flash data. In short, it doesn't support every Inertia feature, but if you want a simple way to render Inertia pages with Gin, this will work.
 
 ## Installation
 
