@@ -57,15 +57,21 @@ func Init(router *gin.Engine) {
 }
 
 // Render renders an Inertia page.
-// Panics if a page cannot be JSON encoded.
-func Render(context *gin.Context, component string, props gin.H) {
+// Returns error if the version was not retrieved or if the page was not JSON encoded.
+func Render(context *gin.Context, component string, props gin.H) error {
 	allProps := gin.H{"errors": gin.H{}}
 	maps.Copy(allProps, props)
+
+	version, error := getVersion()
+	if error != nil {
+		return error
+	}
+
 	page := pageObject{
 		Component: component,
 		Props:     allProps,
 		Url:       context.Request.URL.RequestURI(),
-		Version:   getVersion(),
+		Version:   version,
 	}
 
 	headers := context.MustGet("inertia.headers").(requestHeaders)
@@ -75,22 +81,24 @@ func Render(context *gin.Context, component string, props gin.H) {
 		context.Header(VARY, X_INERTIA)
 		context.JSON(http.StatusOK, page)
 
-		return
+		return nil
 	}
 
 	data, error := json.Marshal(page)
 	if error != nil {
-		panic(error)
+		return error
 	}
 
 	context.HTML(http.StatusOK, "index.html", gin.H{"data": template.JS(data)})
+	return nil
 }
 
 // Flash flashes a value to the current session with the default "_flash" key.
-func Flash(context *gin.Context, value any) {
+// Returns error if session was not saved.
+func Flash(context *gin.Context, value any) error {
 	session := sessions.Default(context)
 	session.AddFlash(value)
-	session.Save()
+	return session.Save()
 }
 
 // redirectWriter represents the ResponseWriter for redirects.
@@ -116,6 +124,7 @@ func convertRedirect() gin.HandlerFunc {
 }
 
 // deleteFlashData returns a middleware handler that deletes flash data after non-303 and 409 responses.
+// Aborts if session was not saved.
 func deleteFlashData() gin.HandlerFunc {
 	return func(context *gin.Context) {
 		context.Next()
@@ -125,19 +134,22 @@ func deleteFlashData() gin.HandlerFunc {
 		if status != http.StatusSeeOther && status != http.StatusConflict {
 			session := sessions.Default(context)
 			session.Delete("_flash")
-			session.Save()
+			error := session.Save()
+			if error != nil {
+				context.AbortWithError(http.StatusInternalServerError, error)
+			}
 		}
 	}
 }
 
 // bindAndSetHeaders returns a middleware handler to bind the request headers and set them to the context.
-// Aborts if headers cannot be bound.
+// Aborts if headers were not bound.
 func bindAndSetHeaders() gin.HandlerFunc {
 	return func(context *gin.Context) {
 		headers := requestHeaders{}
 
 		if error := context.ShouldBindHeader(&headers); error != nil {
-			context.AbortWithStatus(http.StatusBadRequest)
+			context.AbortWithError(http.StatusBadRequest, error)
 		}
 
 		context.Set("inertia.headers", headers)
@@ -146,28 +158,25 @@ func bindAndSetHeaders() gin.HandlerFunc {
 }
 
 // getVersion gets the assets version from the hashed dist/index.html file. This mimics Laravel's adapter.
-// Panics if the file cannot be opened or hashed.
-func getVersion() string {
+// Returns error if the file cannot be opened or hashed.
+func getVersion() (string, error) {
 	file, error := os.Open("dist/index.html")
-
 	if error != nil {
-		panic(error)
+		return "", error
 	}
-
 	defer file.Close()
 
 	hash := sha1.New()
-
 	if _, error := io.Copy(hash, file); error != nil {
-		panic(error)
+		return "", error
 	}
 
-	return fmt.Sprintf("%x", hash.Sum(nil))
+	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
 // checkVersion returns a middleware handler that compares the assets version of the request with the current version,
 // based on the hash of the dist/index.html file.
-// Aborts if the versions don't match.
+// Aborts if the versions do not match.
 func checkVersion() gin.HandlerFunc {
 	return func(context *gin.Context) {
 		headers := context.MustGet("inertia.headers").(requestHeaders)
@@ -175,7 +184,10 @@ func checkVersion() gin.HandlerFunc {
 		if !headers.XInertia || context.Request.Method != "GET" {
 			context.Next()
 		} else {
-			version := getVersion()
+			version, error := getVersion()
+			if error != nil {
+				context.AbortWithError(http.StatusInternalServerError, error)
+			}
 
 			if headers.XInertiaVersion != version {
 				context.Header(X_INERTIA_LOCATION, context.Request.URL.RequestURI())

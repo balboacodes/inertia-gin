@@ -15,14 +15,14 @@ import (
 )
 
 func createIndexFile() {
-	err := os.Mkdir("dist", 0755)
-	if err != nil {
-		panic(err)
+	error := os.Mkdir("dist", 0755)
+	if error != nil {
+		panic(error)
 	}
 
-	err = os.WriteFile("dist/index.html", []byte("{{ .data }}"), 0644)
-	if err != nil {
-		panic(err)
+	error = os.WriteFile("dist/index.html", []byte("{{ .data }}"), 0644)
+	if error != nil {
+		panic(error)
 	}
 }
 
@@ -33,7 +33,9 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
-	os.RemoveAll("dist")
+	if error := os.RemoveAll("dist"); error != nil {
+		panic(error)
+	}
 
 	os.Exit(code)
 }
@@ -46,32 +48,48 @@ func TestRenderWhenInertiaRequest(t *testing.T) {
 	Init(router)
 
 	router.GET("/", func(c *gin.Context) {
-		Render(c, "Home", gin.H{"test": "testing"})
+		if error := Render(c, "Home", gin.H{"test": "testing"}); error != nil {
+			panic(error)
+		}
 	})
 
-	res := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/", nil)
-	req.Header.Add(X_INERTIA, "true")
-	req.Header.Add("X-Inertia-Version", getVersion())
-	router.ServeHTTP(res, req)
+	response := httptest.NewRecorder()
+	request, error := http.NewRequest("GET", "/", nil)
+	if error != nil {
+		panic(error)
+	}
 
-	headers := res.Result().Header
+	request.Header.Add(X_INERTIA, "true")
+	version, error := getVersion()
+	if error != nil {
+		panic(error)
+	}
+
+	request.Header.Add("X-Inertia-Version", version)
+	router.ServeHTTP(response, request)
+
+	headers := response.Result().Header
 
 	var resPage pageObject
-	err := json.Unmarshal(res.Body.Bytes(), &resPage)
-	require.NoError(t, err)
+	error = json.Unmarshal(response.Body.Bytes(), &resPage)
+	require.NoError(t, error)
+
+	version, error = getVersion()
+	if error != nil {
+		panic(error)
+	}
 
 	page := pageObject{
 		Component: "Home",
 		Props:     map[string]any{"errors": map[string]any{}, "test": "testing"},
 		Url:       "/",
-		Version:   getVersion(),
+		Version:   version,
 	}
 
 	assert.Equal(t, headers.Get(X_INERTIA), "true")
 	assert.Equal(t, headers.Get(VARY), X_INERTIA)
 	assert.Equal(t, headers.Get("Content-Type"), "application/json; charset=utf-8")
-	assert.Equal(t, res.Result().StatusCode, http.StatusOK)
+	assert.Equal(t, response.Result().StatusCode, http.StatusOK)
 	assert.Equal(t, resPage, page)
 }
 
@@ -83,17 +101,23 @@ func TestRenderWhenNotInertiaRequest(t *testing.T) {
 	Init(router)
 
 	router.GET("/", func(c *gin.Context) {
-		Render(c, "Home", gin.H{"test": "testing"})
+		if error := Render(c, "Home", gin.H{"test": "testing"}); error != nil {
+			panic(error)
+		}
 	})
 
-	res := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/", nil)
-	router.ServeHTTP(res, req)
+	response := httptest.NewRecorder()
+	request, error := http.NewRequest("GET", "/", nil)
+	if error != nil {
+		panic(error)
+	}
 
-	headers := res.Result().Header
+	router.ServeHTTP(response, request)
+
+	headers := response.Result().Header
 
 	assert.Equal(t, headers.Get(X_INERTIA), "")
-	assert.Equal(t, res.Result().StatusCode, http.StatusOK)
+	assert.Equal(t, response.Result().StatusCode, http.StatusOK)
 	assert.Equal(t, headers.Get("Content-Type"), "text/html; charset=utf-8")
 }
 
@@ -103,7 +127,9 @@ func TestFlash(t *testing.T) {
 	router.Use(sessions.Sessions("mysession", store))
 
 	router.GET("/", func(c *gin.Context) {
-		Flash(c, "test")
+		if error := Flash(c, "test"); error != nil {
+			panic(error)
+		}
 
 		session := sessions.Default(c)
 		assert.Equal(t, session.Flashes(), []any{"test"})
@@ -111,9 +137,13 @@ func TestFlash(t *testing.T) {
 		c.JSON(http.StatusOK, "/")
 	})
 
-	res := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/", nil)
-	router.ServeHTTP(res, req)
+	response := httptest.NewRecorder()
+	request, error := http.NewRequest("GET", "/", nil)
+	if error != nil {
+		panic(error)
+	}
+
+	router.ServeHTTP(response, request)
 }
 
 func TestWriteHeader(t *testing.T) {
@@ -126,9 +156,13 @@ func TestWriteHeader(t *testing.T) {
 		assert.IsType(t, c.Writer, &redirectWriter{})
 	})
 
-	res := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/redirect", nil)
-	router.ServeHTTP(res, req)
+	response := httptest.NewRecorder()
+	request, error := http.NewRequest("GET", "/redirect", nil)
+	if error != nil {
+		panic(error)
+	}
+
+	router.ServeHTTP(response, request)
 }
 
 func TestConvertRedirectMiddleware(t *testing.T) {
@@ -139,11 +173,15 @@ func TestConvertRedirectMiddleware(t *testing.T) {
 		c.Redirect(http.StatusFound, "/")
 	})
 
-	res := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/redirect", nil)
-	router.ServeHTTP(res, req)
+	response := httptest.NewRecorder()
+	request, error := http.NewRequest("GET", "/redirect", nil)
+	if error != nil {
+		panic(error)
+	}
 
-	assert.Equal(t, http.StatusSeeOther, res.Result().StatusCode)
+	router.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusSeeOther, response.Result().StatusCode)
 }
 
 func TestDeleteFlashDataMiddleware(t *testing.T) {
@@ -157,7 +195,9 @@ func TestDeleteFlashDataMiddleware(t *testing.T) {
 	router.GET("/redirect", func(c *gin.Context) {
 		session = sessions.Default(c)
 		session.AddFlash("test")
-		session.Save()
+		if error := session.Save(); error != nil {
+			panic(error)
+		}
 
 		assert.Equal(t, session.Flashes(), []any{"test"})
 
@@ -165,9 +205,13 @@ func TestDeleteFlashDataMiddleware(t *testing.T) {
 
 	})
 
-	res := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/redirect", nil)
-	router.ServeHTTP(res, req)
+	response := httptest.NewRecorder()
+	request, error := http.NewRequest("GET", "/redirect", nil)
+	if error != nil {
+		panic(error)
+	}
+
+	router.ServeHTTP(response, request)
 
 	assert.Equal(t, session.Flashes(), []any([]any(nil)))
 }
@@ -183,19 +227,26 @@ func TestBindAndSetHeadersMiddleware(t *testing.T) {
 		assert.True(t, exists)
 	})
 
-	res := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/", nil)
-	router.ServeHTTP(res, req)
+	response := httptest.NewRecorder()
+	request, error := http.NewRequest("GET", "/", nil)
+	if error != nil {
+		panic(error)
+	}
+
+	router.ServeHTTP(response, request)
 }
 
 func TestGetVersion(t *testing.T) {
 	assert.NotPanics(t, func() { getVersion() })
 }
 
-func TestGetVersionPanicsWhenNoFile(t *testing.T) {
-	os.RemoveAll("dist")
+func TestGetVersionReturnsErrorWhenNoFile(t *testing.T) {
+	if error := os.RemoveAll("dist"); error != nil {
+		panic(error)
+	}
 
-	assert.Panics(t, func() { getVersion() })
+	_, error := getVersion()
+	assert.Error(t, error)
 
 	createIndexFile()
 }
@@ -208,11 +259,15 @@ func TestCheckVersionMiddlewareWhenNotInertiaRequest(t *testing.T) {
 		c.JSON(http.StatusOK, "/")
 	})
 
-	res := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/", nil)
-	router.ServeHTTP(res, req)
+	response := httptest.NewRecorder()
+	request, error := http.NewRequest("GET", "/", nil)
+	if error != nil {
+		panic(error)
+	}
 
-	assert.Equal(t, res.Result().StatusCode, http.StatusOK)
+	router.ServeHTTP(response, request)
+
+	assert.Equal(t, response.Result().StatusCode, http.StatusOK)
 }
 
 func TestCheckVersionMiddlewareWhenVersionIsSame(t *testing.T) {
@@ -223,13 +278,22 @@ func TestCheckVersionMiddlewareWhenVersionIsSame(t *testing.T) {
 		c.JSON(http.StatusOK, "/")
 	})
 
-	res := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/", nil)
-	req.Header.Add(X_INERTIA, "true")
-	req.Header.Add("X-Inertia-Version", getVersion())
-	router.ServeHTTP(res, req)
+	response := httptest.NewRecorder()
+	request, error := http.NewRequest("GET", "/", nil)
+	if error != nil {
+		panic(error)
+	}
 
-	assert.Equal(t, res.Result().StatusCode, http.StatusOK)
+	request.Header.Add(X_INERTIA, "true")
+	version, error := getVersion()
+	if error != nil {
+		panic(error)
+	}
+
+	request.Header.Add("X-Inertia-Version", version)
+	router.ServeHTTP(response, request)
+
+	assert.Equal(t, response.Result().StatusCode, http.StatusOK)
 }
 
 func TestCheckVersionMiddlewareWhenVersionIsDifferent(t *testing.T) {
@@ -240,12 +304,16 @@ func TestCheckVersionMiddlewareWhenVersionIsDifferent(t *testing.T) {
 		c.JSON(http.StatusOK, "/")
 	})
 
-	res := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/", nil)
-	req.Header.Add(X_INERTIA, "true")
-	req.Header.Add("X-Inertia-Version", "123")
-	router.ServeHTTP(res, req)
+	response := httptest.NewRecorder()
+	request, error := http.NewRequest("GET", "/", nil)
+	if error != nil {
+		panic(error)
+	}
 
-	assert.Equal(t, res.Result().Header.Get(X_INERTIA_LOCATION), "/")
-	assert.Equal(t, res.Result().StatusCode, http.StatusConflict)
+	request.Header.Add(X_INERTIA, "true")
+	request.Header.Add("X-Inertia-Version", "123")
+	router.ServeHTTP(response, request)
+
+	assert.Equal(t, response.Result().Header.Get(X_INERTIA_LOCATION), "/")
+	assert.Equal(t, response.Result().StatusCode, http.StatusConflict)
 }
